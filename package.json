@@ -3,7 +3,7 @@
   "version": "2.0.3",
   "description": "A public-domain Z-machine implementation written in JavaScript/ES6",
   "scripts": {
-     "test": "node example.js minizork.z3"
+    "test": "node example.js minizork.z3"
   },
   "repository": {
     "type": "git",

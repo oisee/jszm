@@ -197,6 +197,7 @@ JSZM.prototype={
   },
   highlight: ()=>[],
   isTandy: false,
+  log: ()=>{},
   mem: null,
   memInit: null,
   parseVocab: function(s) {
@@ -269,6 +270,7 @@ JSZM.prototype={
     };
     move=(x,y) => {
       var w,z;
+      this.log("mv",x,y);
       // Remove from old FIRST-NEXT chain
       if(z=mem[objects+x*9+4]) {
         if(mem[objects+z*9+6]==x) { // is x.loc.first=x?
@@ -320,11 +322,13 @@ JSZM.prototype={
       while(mem[z]) {
         if((mem[z]&31)==op1) {
           op3=z+1;
+          this.log("pf",z,1);
           return true;
         } else {
           z+=(mem[z]>>5)+2;
         }
       }
+      this.log("pf",z,0);
       op3=0;
       return false;
     };
@@ -338,7 +342,10 @@ JSZM.prototype={
       var x=pcgetb();
       if(x==0) ds.push(y);
       else if(x<16) cs[0].local[x-1]=y;
-      else this.put(globals+2*x,y);
+      else {
+        //console.log("*store",x,y);
+        this.put(globals+2*x,y);
+      }
     };
     xfetch=(x) => {
       if(x==0) return ds[ds.length-1];
@@ -348,7 +355,10 @@ JSZM.prototype={
     xstore=(x,y) => {
       if(x==0) ds[ds.length-1]=y;
       else if(x<16) cs[0].local[x-1]=y;
-      else this.put(globals+2*x,y);
+      else {
+        //console.log("*xstore",x,y);
+        this.put(globals+2*x,y);
+      }
     };
 
     // Initializations
@@ -413,14 +423,17 @@ JSZM.prototype={
           break;
         case 10: // FSET?
           flagset();
+          //this.log("fq",op2,op3);
           predicate(opc&op3);
           break;
         case 11: // FSET
           flagset();
+          this.log("fs",op2,op3);
           this.put(op2,opc|op3);
           break;
         case 12: // FCLEAR
           flagset();
+          this.log("fc",op2,op3);
           this.put(op2,opc&~op3);
           break;
         case 13: // SET
@@ -588,6 +601,7 @@ JSZM.prototype={
           break;
         case 227: // PUTP
           propfind();
+          this.log("pp",op2,op3);
           if(mem[op3-1]&32) this.put(op3,op2);
           else mem[op3]=op2;
           break;

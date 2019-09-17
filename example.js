@@ -15,6 +15,9 @@ G.defineR(In,"question","questionG",1);
 G.run((function*() {
   var story=yield fs.readFileG(process.argv[2],{});
   var game=new JSZM(story);
+  game.log=function(a,b,c) {
+    console.log(a,b,c)
+  }
   game.print=function*(x) {
     Out.write(x,"ascii");
   };
