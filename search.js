@@ -13,25 +13,32 @@ G.defineER(fs,"writeFile","writeFileG",3);
 G.defineR(In,"question","questionG",1);
 
 class DeadError extends Error { }
+class NoMoreTurns extends Error { }
 
 G.run((function*() {
   var story=yield fs.readFileG(process.argv[2],{});
   var game=new JSZM(story);
   var vocab;
   var vocabdict = {};
-  var turncmd = '__START__';
+  var turncmd;
   var turnscore;
   var turnmods;
   var turntoks;
   var playtoks;
-  var playindex;
+  var numturns;
+  var maxturns = 20;
   var allcmdstats = {};
   var alltokstats = {};
   var ignorecmds = JSON.parse(fs.readFileSync('ignorecmds.json'));
   var rankedcmds;
+  var priors = new Map();
   
   function logtoken(token) {
     turntoks[token] = 1;
+  }
+  game.log = (a,b,c) => {
+    logtoken(a+"_"+b+"_"+c);
+    turnmods += 1;
   }
   function newgame() {
     // sort commands by rank (best first)
@@ -39,17 +46,18 @@ G.run((function*() {
     for (var cmd in allcmdstats) {
       rankedcmds.push(allcmdstats[cmd]);
     }
-    rankedcmds.sort((a,b) => { return b.score-a.score });
+    rankedcmds.sort((a,b) => { return b.score - a.score });
     playtoks = new Set();
     turntoks = {};
     turnmods = 0;
     turnscore = 0;
-    playindex = 0;
+    numturns = 0;
+    turncmd = '__START__';
   }
   function getrandomcmd() {
     do {
       var s = "";
-      for (var i=0; i<2; i++) {
+      for (let i=0; i<2; i++) {
         if (i>0) s += " ";
         s += vocab[Math.floor(Math.random() * vocab.length)];
         if (Math.random() < 0.5) break;
@@ -58,37 +66,43 @@ G.run((function*() {
     return s;
   }
   function committurn(rew) {
-    playindex++;
+    // store just 1 token for first turn, which is always the same
+    if (numturns == 0) turntoks = {'__FIRST__':1};
+    numturns++;
     // ignore command if it did nothing
     if (turnmods == 0) {
       ignorecmds[turncmd] = 1;
     } else {
-      var thiscmdstats = allcmdstats[turncmd];
+      let thiscmdstats = allcmdstats[turncmd];
       if (!thiscmdstats)
-        thiscmdstats = allcmdstats[turncmd] = {cmd:turncmd,toks:turntoks,score:0};
-      for (var token in turntoks) {
+        thiscmdstats = allcmdstats[turncmd] = {
+          cmd:turncmd,
+          toks:turntoks,
+          score:0
+        };
+      for (let token in turntoks) {
         // new token?
-        var stat = alltokstats[token];
+        let stat = alltokstats[token];
         if (!stat) {
           stat = alltokstats[token] = {
             count: 0,
             first: 99999,
-            cmd: turncmd,
+            cmd: turncmd
           };
           turnscore += 1;
         }
         stat.count += 1;
-        if (playindex < stat.first) {
-          stat.first = playindex;
+        if (numturns < stat.first) {
+          stat.first = numturns;
           stat.cmd = turncmd;
           console.log(token, playtoks.size, stat);
-          playtoks.forEach((pt) => {
-            //console.log(pt, alltokstats[pt]);
-            alltokstats[pt].next = token;
-          });
         }
-        stat.cmd = turncmd;
-        //if (stat.count < 100) console.log(token, stat);
+        // update priors
+        playtoks.forEach((pt) => {
+          let key = [turncmd, token, pt];
+          priors[key] = (priors[key] | 0) + 1;
+          //if (stat.count>1 && stat.count==priors[key]) console.log(stat.count, priors[key], key);
+        });
         // new token for this cmd?
         if (!thiscmdstats.toks[token]) {
           thiscmdstats.toks[token] = 1;
@@ -98,28 +112,23 @@ G.run((function*() {
       thiscmdstats.score += turnscore;
       console.log(turncmd,'+',turnscore,'=',thiscmdstats.score);
       // add to playtoks
-      for (var token in turntoks) {
+      for (let token in turntoks) {
         playtoks.add(token);
       }
     }
     turntoks = {};
     turnscore = 0;
     turnmods = 0;
-  }
-  game.log = (a,b,c) => {
-    logtoken(a+"_"+b+"_"+c);
-    turnmods += 1;
-    //console.log(a,b,c)
+    if (numturns >= maxturns) throw new NoMoreTurns();
   }
   game.print=function*(x) {
     if (/RESTART, RESTORE, or QUIT/.exec(x)) {
       committurn(-1);
       throw new DeadError();
     }
-    for (var tok of x.split(/\s+/)) {
-      if (tok.length >= 3 && !vocabdict[tok] && !parseInt(tok)) {
-        logtoken(tok);
-      }
+    if (x.length >= 3 && !vocabdict[x] && !parseInt(x)) {
+      let tok = x.substr(0, 32).trim(); //for (var tok of x.split(/\s+/))
+      logtoken(tok);
     }
     Out.write(x,"ascii");
   };
@@ -142,8 +151,8 @@ G.run((function*() {
       var score = 99999;
       playtoks.forEach((tok) => {
         var stats = alltokstats[tok];
-        if (stats.next) {
-          var next = alltokstats[stats.next];
+        if (stats.future) {
+          var next = alltokstats[stats.future];
           console.log('+++', tok, alltokstats[tok], next.cmd);
         }
       });
@@ -193,6 +202,8 @@ G.run((function*() {
           fs.writeFileSync('ignorecmds.json.tmp',JSON.stringify(ignorecmds));
           fs.renameSync('ignorecmds.json.tmp', 'ignorecmds.json');
         }
+      } else if (e instanceof NoMoreTurns) {
+        //
       } else
         throw e;
     }

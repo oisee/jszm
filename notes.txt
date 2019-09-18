@@ -13,3 +13,12 @@ When atom generated anew or earlier than before, record data:
 - command
 - prior atoms
 
+(command, runs)
+(command, generated, prior, count)
+
+Find command that generates low score token with current priors.
+Execute, update stats.
+
+Run command eagerly, fails due to priors.
+Update stats, run later.
+
