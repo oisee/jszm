@@ -1,0 +1,15 @@
+
+
+Goal: Find shortest path to every atom.
+
+Command synonyms -- merge similar commands
+Explore new areas
+Score heuristic
+
+Pick command that has highest probability of generating most uncommon atom.
+
+When atom generated anew or earlier than before, record data:
+- first turn #
+- command
+- prior atoms
+

@@ -17,93 +17,89 @@ class DeadError extends Error { }
 G.run((function*() {
   var story=yield fs.readFileG(process.argv[2],{});
   var game=new JSZM(story);
-  var words;
+  var vocab;
+  var vocabdict = {};
   var turncmd = '__START__';
-  var turnscore = 0;
-  var turnmods = 0;
-  var turntoks = {};
-  var allcmdstats = {};
-  var alltoks = {};
-  var priors = new Map();
+  var turnscore;
+  var turnmods;
+  var turntoks;
   var playtoks;
-  var playcmds;
+  var playindex;
+  var allcmdstats = {};
+  var alltokstats = {};
   var ignorecmds = JSON.parse(fs.readFileSync('ignorecmds.json'));
   var rankedcmds;
   
   function logtoken(token) {
     turntoks[token] = 1;
   }
-  function sortcmds() {
+  function newgame() {
+    // sort commands by rank (best first)
     rankedcmds = []
     for (var cmd in allcmdstats) {
       rankedcmds.push(allcmdstats[cmd]);
     }
     rankedcmds.sort((a,b) => { return b.score-a.score });
     playtoks = new Set();
-    playcmds = []
+    turntoks = {};
+    turnmods = 0;
+    turnscore = 0;
+    playindex = 0;
   }
   function getrandomcmd() {
     do {
       var s = "";
       for (var i=0; i<2; i++) {
         if (i>0) s += " ";
-        s += words[Math.floor(Math.random() * words.length)];
+        s += vocab[Math.floor(Math.random() * vocab.length)];
         if (Math.random() < 0.5) break;
       }
     } while (ignorecmds[s]);
     return s;
   }
-  function addpriors(b, cmd) {
-    // only consider underscore tokens (for now)
-    if (!b.startsWith('mv_') && !b.startsWith('fs_') && !b.startsWith('fc_')) return;
-    // try to find prior tokens in this playthrough that always pop up with (cmd, b)
-    var cmd_b = [cmd, b];
-    var p = priors[cmd_b];
-    if (!p) {
-      // fill out list with this playthrough
-      p = new Set(playtoks);
-    } else {
-      // intersect with tokens in this playthrough
-      p = new Set([...p].filter(x => playtoks.has(x)));
-    }
-    console.log(cmd_b, p.size);
-    priors[cmd_b] = p;
-  }
   function committurn(rew) {
-    playcmds.push(turncmd);
-    // find new tokens for this playthrough
-    for (var token in turntoks) {
-      if (!playtoks[token]) {
-        addpriors(token, turncmd);
-      }
-    }
-    for (var token in turntoks) {
-      playtoks.add(token);
-    }
-    
+    playindex++;
+    // ignore command if it did nothing
     if (turnmods == 0) {
       ignorecmds[turncmd] = 1;
     } else {
       var thiscmdstats = allcmdstats[turncmd];
-      // only on second time running command...
-      if (thiscmdstats) {
-        for (var token in turntoks) {
-          // new token?
-          if (!alltoks[token]) {
-            turnscore += 1;
-          }
-          alltoks[token] = (alltoks[token] | 0) + 1;
-          console.log(token, alltoks[token]);
-          // new token for this cmd?
-          if (!thiscmdstats.toks[token]) {
-            thiscmdstats.toks[token] = 1;
-            turnscore += 1;
-          }
+      if (!thiscmdstats)
+        thiscmdstats = allcmdstats[turncmd] = {cmd:turncmd,toks:turntoks,score:0};
+      for (var token in turntoks) {
+        // new token?
+        var stat = alltokstats[token];
+        if (!stat) {
+          stat = alltokstats[token] = {
+            count: 0,
+            first: 99999,
+            cmd: turncmd,
+          };
+          turnscore += 1;
         }
-        thiscmdstats.score += turnscore;
-        console.log(turncmd,'+',turnscore,'=',thiscmdstats.score);
-      } else {
-        allcmdstats[turncmd] = {cmd:turncmd,toks:turntoks,score:0};
+        stat.count += 1;
+        if (playindex < stat.first) {
+          stat.first = playindex;
+          stat.cmd = turncmd;
+          console.log(token, playtoks.size, stat);
+          playtoks.forEach((pt) => {
+            //console.log(pt, alltokstats[pt]);
+            alltokstats[pt].next = token;
+          });
+        }
+        stat.cmd = turncmd;
+        //if (stat.count < 100) console.log(token, stat);
+        // new token for this cmd?
+        if (!thiscmdstats.toks[token]) {
+          thiscmdstats.toks[token] = 1;
+          turnscore += 1;
+        }
+      }
+      thiscmdstats.score += turnscore;
+      console.log(turncmd,'+',turnscore,'=',thiscmdstats.score);
+      // add to playtoks
+      for (var token in turntoks) {
+        playtoks.add(token);
       }
     }
     turntoks = {};
@@ -115,34 +111,43 @@ G.run((function*() {
     turnmods += 1;
     //console.log(a,b,c)
   }
-  function log(token,reward) {
-    var rec = thisplay[token];
-    if (!rec) {
-      rec = {n:0,d:0};
-      thisplay[token] = rec;
-    }
-    rec.n += reward;
-    rec.d += 1;
-  }
   game.print=function*(x) {
     if (/RESTART, RESTORE, or QUIT/.exec(x)) {
       committurn(-1);
       throw new DeadError();
     }
     for (var tok of x.split(/\s+/)) {
-      if (tok.length >= 3) logtoken(tok);
+      if (tok.length >= 3 && !vocabdict[tok] && !parseInt(tok)) {
+        logtoken(tok);
+      }
     }
     Out.write(x,"ascii");
   };
+  function makevocab() {
+    // create word list if not present
+    if (!vocab) {
+      var keys = game.vocabulary.keys();
+      vocab=Array.from(keys).filter((s) => { return /^\w/.exec(s) });
+      vocab=vocab.filter((s) => { return !/^(restor|restar|save|q|quit)$/.exec(s) });
+      vocab.forEach((w) => { vocabdict[w]=1; });
+    }
+  }
   game.read=function*() {
     committurn(1);
-    if (!words) {
-      var keys = game.vocabulary.keys();
-      words=Array.from(keys).filter((s) => { return /^\w/.exec(s) });
-      words=words.filter((s) => { return !/^(restor|restar|save|q|quit)$/.exec(s) });
-    }
+    makevocab();
     // get next command
     if (rankedcmds.length && Math.random() < 0.5) {
+      // figure out next token based on prior
+      /*
+      var score = 99999;
+      playtoks.forEach((tok) => {
+        var stats = alltokstats[tok];
+        if (stats.next) {
+          var next = alltokstats[stats.next];
+          console.log('+++', tok, alltokstats[tok], next.cmd);
+        }
+      });
+      */
       var i = Math.floor(Math.pow(Math.random(), 4) * rankedcmds.length);
       turncmd = rankedcmds[i].cmd;
       console.log(turncmd, '-> score', rankedcmds[i].score, '#', i);
@@ -178,13 +183,12 @@ G.run((function*() {
   };
   while (1) {
     try {
-      sortcmds();
+      newgame();
       yield*game.run();
     } catch(e) {
       if (e instanceof DeadError) {
         console.log(turncmd,'killed you');
         delete allcmdstats[turncmd]; // TODO?
-        console.log("this playthrough had", Object.keys(playtoks).length/playcmds.length, "tokens per command");
         if (0) {
           fs.writeFileSync('ignorecmds.json.tmp',JSON.stringify(ignorecmds));
           fs.renameSync('ignorecmds.json.tmp', 'ignorecmds.json');
