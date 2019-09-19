@@ -26,7 +26,7 @@ G.run((function*() {
   var turntoks;
   var playtoks;
   var numturns;
-  var maxturns = 20;
+  var maxturns = 10;
   var allcmdstats = {};
   var alltokstats = {};
   var ignorecmds = JSON.parse(fs.readFileSync('ignorecmds.json'));
@@ -37,8 +37,9 @@ G.run((function*() {
     turntoks[token] = 1;
   }
   game.log = (a,b,c) => {
-    logtoken(a+"_"+b+"_"+c);
     turnmods += 1;
+    if (a == 'pf') return; // use as evidence of activity, but don't record
+    logtoken(a+"_"+b+"_"+c);
   }
   function newgame() {
     // sort commands by rank (best first)
@@ -95,14 +96,15 @@ G.run((function*() {
         if (numturns < stat.first) {
           stat.first = numturns;
           stat.cmd = turncmd;
-          console.log(token, playtoks.size, stat);
+          //console.log(token, playtoks.size, stat);
         }
         // update priors
-        playtoks.forEach((pt) => {
-          let key = [turncmd, token, pt];
-          priors[key] = (priors[key] | 0) + 1;
-          //if (stat.count>1 && stat.count==priors[key]) console.log(stat.count, priors[key], key);
-        });
+        let pkey = [turncmd, token];
+        let prec = priors[pkey];
+        var oldpsize = prec ? prec.size : 0;
+        if (!prec) prec = priors[pkey] = playtoks;
+        else prec = priors[pkey] = new Set([...prec].filter(x => playtoks.has(x)));
+        console.log(stat.count, pkey, oldpsize, '->', prec.size);
         // new token for this cmd?
         if (!thiscmdstats.toks[token]) {
           thiscmdstats.toks[token] = 1;
