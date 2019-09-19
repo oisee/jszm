@@ -617,6 +617,7 @@ JSZM.prototype={
           yield*this.genPrint(String(op0));
           break;
         case 231: // RANDOM
+          this.log('rand',op0,0);
           if (op0 <= 0) {               // If 'op0' is non-positive, reseed the PRNG.
             if (op0 === 0) {
               initRng();                // If 0, seed using Math.random().

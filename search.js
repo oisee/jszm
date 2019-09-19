@@ -4,6 +4,7 @@ const G=require("genasync"); // A package I wrote
 const JSZM=require("./jszm.js"); // version 2
 const readline=require("readline");
 const fs=require("fs");
+const SortedMap=require('sorted-map');
 
 const In=readline.createInterface({input: process.stdin});
 const Out=process.stdout;
@@ -14,6 +15,15 @@ G.defineR(In,"question","questionG",1);
 
 class DeadError extends Error { }
 class NoMoreTurns extends Error { }
+
+class Playthrough {
+  constructor() {
+    this.turns = [];
+  }
+  addturn(cmd, toks) {
+    this.turns.push({cmd:cmd, toks:toks});
+  }
+}
 
 G.run((function*() {
   var story=yield fs.readFileG(process.argv[2],{});
@@ -29,9 +39,12 @@ G.run((function*() {
   var maxturns = 10;
   var allcmdstats = {};
   var alltokstats = {};
-  var ignorecmds = JSON.parse(fs.readFileSync('ignorecmds.json'));
+  var ignorecmds = {}; //JSON.parse(fs.readFileSync('ignorecmds.json'));
   var rankedcmds;
-  var priors = new Map();
+  var playthru;
+  var tokfreq = new SortedMap();
+  var goaltok;
+  var goalrec;
   
   function logtoken(token) {
     turntoks[token] = 1;
@@ -52,8 +65,22 @@ G.run((function*() {
     turntoks = {};
     turnmods = 0;
     turnscore = 0;
-    numturns = 0;
-    turncmd = '__START__';
+    numturns = -1;
+    turncmd = null;
+    playthru = new Playthrough();
+    var goal = tokfreq.slice(0,10);
+    goaltok = goal && goal.length && rndchoice(goal).key;
+    goalrec = alltokstats[goaltok];
+    console.log("GOAL:",goal,goalrec&&goalrec.count,goalrec&&goalrec.first,goaltok);
+  }
+  function metgoal() {
+    goalrec = null;
+  }
+  function endgame() {
+    // did we not meet goal?
+    if (goaltok && !goalrec) {
+      console.log("Goal not met:", goaltok);
+    }
   }
   function getrandomcmd() {
     do {
@@ -67,13 +94,23 @@ G.run((function*() {
     return s;
   }
   function committurn(rew) {
-    // store just 1 token for first turn, which is always the same
-    if (numturns == 0) turntoks = {'__FIRST__':1};
-    numturns++;
+    // ignore first turn
+    if (numturns < 0)
+      turnmods = 0;
+    else
+      playthru.addturn(turncmd, turntoks);
+    // did we hit our goal?
+    if (turntoks[goaltok]) {
+      metgoal();
+    }
     // ignore command if it did nothing
-    if (turnmods == 0) {
-      ignorecmds[turncmd] = 1;
+    if (/*turnmods == 0 ||*/ !turncmd) {
+      if (turncmd) {
+        ignorecmds[turncmd] = 1;
+        console.log("IGNORING", turncmd);
+      }
     } else {
+      // create command stats
       let thiscmdstats = allcmdstats[turncmd];
       if (!thiscmdstats)
         thiscmdstats = allcmdstats[turncmd] = {
@@ -81,6 +118,7 @@ G.run((function*() {
           toks:turntoks,
           score:0
         };
+      // look at all tokens for this turn
       for (let token in turntoks) {
         // new token?
         let stat = alltokstats[token];
@@ -93,18 +131,19 @@ G.run((function*() {
           turnscore += 1;
         }
         stat.count += 1;
+        // update token in sorted list
+        if (numturns > 0)
+          tokfreq.set(token, stat.count);
+        else
+          tokfreq.del(token);
+        // record best walkthrough
         if (numturns < stat.first) {
+          console.log(token, numturns, '<', stat.first, '(', stat.count, ')');
           stat.first = numturns;
           stat.cmd = turncmd;
-          //console.log(token, playtoks.size, stat);
+          stat.best = playthru;
+          if (numturns == 0) console.log("SOLVED", token);
         }
-        // update priors
-        let pkey = [turncmd, token];
-        let prec = priors[pkey];
-        var oldpsize = prec ? prec.size : 0;
-        if (!prec) prec = priors[pkey] = playtoks;
-        else prec = priors[pkey] = new Set([...prec].filter(x => playtoks.has(x)));
-        console.log(stat.count, pkey, oldpsize, '->', prec.size);
         // new token for this cmd?
         if (!thiscmdstats.toks[token]) {
           thiscmdstats.toks[token] = 1;
@@ -118,9 +157,11 @@ G.run((function*() {
         playtoks.add(token);
       }
     }
+    // reset for next turn
     turntoks = {};
     turnscore = 0;
     turnmods = 0;
+    numturns++;
     if (numturns >= maxturns) throw new NoMoreTurns();
   }
   game.print=function*(x) {
@@ -143,29 +184,32 @@ G.run((function*() {
       vocab.forEach((w) => { vocabdict[w]=1; });
     }
   }
+  function rndchoice(list, len) {
+    if (!len) len = list.length;
+    var i = Math.floor(Math.random() * len);
+    return list[i];
+  }
   game.read=function*() {
     committurn(1);
     makevocab();
-    // get next command
+    // if we have a goal, get next command from playthrough
+    if (goalrec && goalrec.best && numturns <= goalrec.first) {
+      turncmd = rndchoice(goalrec.best.turns, goalrec.first+1).cmd;
+      console.log(turncmd, ';;', goaltok);
+      return turncmd;
+    }
+    // get command ranked by "goodness"
+    /*
     if (rankedcmds.length && Math.random() < 0.5) {
-      // figure out next token based on prior
-      /*
-      var score = 99999;
-      playtoks.forEach((tok) => {
-        var stats = alltokstats[tok];
-        if (stats.future) {
-          var next = alltokstats[stats.future];
-          console.log('+++', tok, alltokstats[tok], next.cmd);
-        }
-      });
-      */
       var i = Math.floor(Math.pow(Math.random(), 4) * rankedcmds.length);
       turncmd = rankedcmds[i].cmd;
       console.log(turncmd, '-> score', rankedcmds[i].score, '#', i);
-    } else {
-      turncmd = getrandomcmd();
-      console.log(turncmd);
+      return turncmd;
     }
+    */
+    // get totally random command
+    turncmd = getrandomcmd();
+    console.log(turncmd);
     return turncmd;
     //return yield In.questionG("");
   };
@@ -209,6 +253,7 @@ G.run((function*() {
       } else
         throw e;
     }
+    endgame();
   }
   process.exit(0);
 })());
