@@ -322,13 +322,13 @@ JSZM.prototype={
       while(mem[z]) {
         if((mem[z]&31)==op1) {
           op3=z+1;
-          this.log("pf",z,1);
+          this.log("pf",op0,op1);
           return true;
         } else {
           z+=(mem[z]>>5)+2;
         }
       }
-      this.log("pf",z,0);
+      this.log("pf",op0,0);
       op3=0;
       return false;
     };
@@ -428,12 +428,12 @@ JSZM.prototype={
           break;
         case 11: // FSET
           flagset();
-          this.log("fs",op2,op3);
+          this.log("fs",op0,op1);
           this.put(op2,opc|op3);
           break;
         case 12: // FCLEAR
           flagset();
-          this.log("fc",op2,op3);
+          this.log("fc",op0,op1);
           this.put(op2,opc&~op3);
           break;
         case 13: // SET

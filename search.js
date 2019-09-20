@@ -42,9 +42,9 @@ G.run((function*() {
   var playtoks;		// tokens for current game
   var playvocab;	// vocabulary for current game (intersects game vocab)
   var numturns;		// # of turns in current game
-  var maxturns = 10;	// max turns in current game
+  var maxturns = 20;	// max turns in current game
   var goaltok;		// current goal token
-  var goalrec;		// current token record from 'alltokstats'  
+  var goalrec;		// current token record from 'alltokstats'
   
   var turncmd;		// last game command
   var turnscore;	// current turn score
@@ -63,7 +63,9 @@ G.run((function*() {
     if ((numplays++ & 15) == 0) {
       rankedcmds = []
       for (var cmd in allcmdstats) {
-        rankedcmds.push(allcmdstats[cmd]);
+        var cmdstats = allcmdstats[cmd];
+        if (cmdstats.score > 0 && !ignorecmds[cmd])
+          rankedcmds.push(cmdstats);
       }
       rankedcmds.sort((a,b) => { return b.score - a.score });
     }
@@ -118,18 +120,19 @@ G.run((function*() {
       metgoal();
     }
     // ignore command if it did nothing
-    if (turnmods == 0 || !turncmd) {
+    if (/*turnmods == 0 || */!turncmd) {
       if (turncmd) {
         //ignorecmds[turncmd] = 1;
         console.log("IGNORING", turncmd);
       }
     } else {
       // create command stats
-      let thiscmdstats = allcmdstats[turncmd];
+      var verb = turncmd; //.split(' ')[0];
+      let thiscmdstats = allcmdstats[verb];
       if (!thiscmdstats)
-        thiscmdstats = allcmdstats[turncmd] = {
-          cmd:turncmd,
-          toks:turntoks,
+        thiscmdstats = allcmdstats[verb] = {
+          cmd:verb,
+          toks:{},
           score:0
         };
       // look at all tokens for this turn
@@ -238,12 +241,16 @@ G.run((function*() {
       return turncmd;
     }
     // get command ranked by "goodness"
+    /*
     if (rankedcmds.length && Math.random() < 0.5) {
-      var i = Math.floor(Math.pow(Math.random(), 4) * rankedcmds.length);
+      var i = Math.floor(Math.pow(Math.random(), 3) * rankedcmds.length);
       turncmd = rankedcmds[i].cmd;
-      console.log(turncmd, '-> score', rankedcmds[i].score, '#', i);
+      //if (playvocab.size > 10 && Math.random() < 0.5)
+        //turncmd += ' ' + rndchoice(Array.from(playvocab));
+      console.log(turncmd, '=', rankedcmds[i].score, '#', i);
       return turncmd;
     }
+    */
     // get totally random command
     turncmd = getrandomcmd();
     console.log(turncmd);
