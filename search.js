@@ -47,15 +47,19 @@ function GameRunner() {
   var vocab;		// vocabulary for game
   var vocabdict = {};	// .. in dictionary form
   var maxturns = 50;	// max turns in current game
-  var usewords = true;	// use word output as tokens?
+  var usewords = false;	// use word output as tokens?
+  var wordtoklen = 25;  // truncate phrases to this length
   var usetech = true;	// use vm tech output?
+  var usecondtok = true; // use conditional (__) tokens?
   var prob_vocab = 0.5; // probability of a recent vocab word
   var prob_end = 0.5;   // probability of ending the command
+  var stablethresh = 50; // token considered stable after this many turns
 
   var numplays = 0;	// # of plays in all games
   var ignorecmds = {}; // no longer used JSON.parse(fs.readFileSync('ignorecmds.json'));
   var playthru;		// current game Playthrough
   var alltokstats = {}; // token -> record
+  var stabletoks = new Set();
   var tokfreq = new SortedMap();	// tokens sorted by score
 
   var playtoks;		// tokens for current game
@@ -69,8 +73,8 @@ function GameRunner() {
   var turnscore;	// current turn score
   var turnmods;		// # of VM modifications for current turn
   var turntoks;		// tokens for current turn
-  
-  function logtoken(token) {
+
+  function addtoken(token) {
     let stat = alltokstats[token];
     // new token? create record
     if (!stat) {
@@ -87,10 +91,22 @@ function GameRunner() {
       turnscore += 1;
     }
     turntoks.add(stat.token); // string interning
+  }  
+  function logtoken(token) {
+    addtoken(token);
+    // log all prior tokens, combined
+    if (usecondtok && stabletoks.has(token)) {
+      for (var priortok of playtoks) {
+        if (stabletoks.has(priortok) && priortok.indexOf(token) < 0) {
+          var key = priortok + "__" + token;
+          if (!turntoks.has(key)) { addtoken(key); } 
+        }
+      }
+    }
   }
   game.log = (a,b,c) => {
     turnmods += 1;
-    if (a == 'pf') return; // use as evidence of activity, but don't record
+    if (a == 'pf' || a == 'rand') return; // use as evidence of activity, but don't record
     if (usetech) logtoken(a+"_"+b+"_"+c);
   }
   this.newgame = function() {
@@ -120,7 +136,7 @@ function GameRunner() {
       goalrec.goalsucc += 1;
       console.log("Goal success:",goaltok,goalrec.goalsucc,'/',goalrec.goalruns,'turn #',numturns);
       // if we're already stable, stop testing
-      if (goalrec.priorstable < 100) {
+      if (goalrec.priorstable < stablethresh) {
         var oldpriorcount = goalrec.priorcount | 0;
         var newpriors = playthru.merge(goalrec.best, goalrec.first, numturns);
         if (oldpriorcount == newpriors.size) {
@@ -130,6 +146,10 @@ function GameRunner() {
         }
         goalrec.priorcount = newpriors.size;
         console.log('MERGE', goaltok, oldpriorcount, '->', newpriors.size, '/', goalrec.priorstable);
+        stabletoks.delete(goaltok);
+      } else {
+        stabletoks.add(goaltok);
+        console.log("STABLE", goaltok);
       }
       goalmet = 1;
     }
@@ -175,7 +195,7 @@ function GameRunner() {
         updatetokfreq(token, stat);
         // record best walkthrough
         if (numturns < stat.first) {
-          console.log('REDUCE', token, numturns, '<', stat.first, '(', stat.count, ')');
+          console.log('REDUCE', token, numturns, '<', stat.first, '(', stat.goalsucc, '/', stat.goalruns, '/', stat.count, ')');
           // if this is 1st turn, don't bother replaying
           if (numturns == 0) {
             stat.best = null;
@@ -207,7 +227,7 @@ function GameRunner() {
     // convert to token
     if (usewords) {
       if (x.length >= 3 && !vocabdict[x] && !parseInt(x)) {
-        let tok = x.substr(0, 32).trim();
+        let tok = x.substr(0, wordtoklen).trim();
         logtoken(tok);
       }
     }
