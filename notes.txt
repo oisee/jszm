@@ -48,3 +48,9 @@ If the tokens we see don't change from play to play, we increment the
 When a goal token is more stable, we shuffle less often and just replay in
 order.
 
+Though shortest distance to tokens is best for exploring, you might forget
+to bring a sword to the dungeon.
+
+Maybe we need to look for "A then B" instead of just "A".
+e.g. "GET SWORD then TROLL ROOM"
+

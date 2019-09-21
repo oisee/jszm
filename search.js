@@ -47,8 +47,8 @@ function GameRunner() {
   var vocab;		// vocabulary for game
   var vocabdict = {};	// .. in dictionary form
   var maxturns = 50;	// max turns in current game
-  var usewords = false; // use word output as tokens?
-  var usetech = true;   // use vm tech output?
+  var usewords = true;	// use word output as tokens?
+  var usetech = true;	// use vm tech output?
   var prob_vocab = 0.5; // probability of a recent vocab word
   var prob_end = 0.5;   // probability of ending the command
 
@@ -97,6 +97,7 @@ function GameRunner() {
     // reset other stuff
     playtoks = new Set();
     playvocab = [];
+    //playvocab = ['pull','move','rug']; // TODO: CHEATER
     turntoks = new Set();
     turnmods = 0;
     turnscore = 0;
@@ -111,7 +112,7 @@ function GameRunner() {
     if (goalrec) {
       goalrec.goalruns += 1;
       updatetokfreq(goaltok, goalrec);
-      console.log("GOAL:",goal,goalrec.count,goalrec.first,goaltok);
+      console.log("GOAL:",goalrec.cmd,goal,goalrec.count,goalrec.first,goaltok);
     }
   }
   function metgoal() {
@@ -174,7 +175,7 @@ function GameRunner() {
         updatetokfreq(token, stat);
         // record best walkthrough
         if (numturns < stat.first) {
-          console.log(token, numturns, '<', stat.first, '(', stat.count, ')');
+          console.log('REDUCE', token, numturns, '<', stat.first, '(', stat.count, ')');
           // if this is 1st turn, don't bother replaying
           if (numturns == 0) {
             stat.best = null;
