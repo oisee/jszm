@@ -28,11 +28,11 @@ class Playthrough {
     var set0 = new Set();
     var set1 = new Set();
     for (var i=0; i<formerdepth; i++) {
-      console.log('SET0',i,former.turns[i]);
+      //console.log('SET0',i,former.turns[i]);
       former.turns[i].toks.forEach((value) => { set0.add(value) });
     }
     for (var i=0; i<newdepth; i++) {
-      console.log('SET1',i,this.turns[i]);
+      //console.log('SET1',i,this.turns[i]);
       this.turns[i].toks.forEach((value) => { if (set0.has(value)) set1.add(value) });
     }
     return set1;
@@ -108,6 +108,15 @@ G.run((function*() {
     if (!goalmet) {
       goalrec.goalsucc += 1;
       console.log("Goal success:",goaltok,goalrec.goalsucc,'/',goalrec.goalruns,'turn #',numturns);
+      var oldpriorcount = goalrec.priorcount | 0;
+      var newpriors = playthru.merge(goalrec.best, goalrec.first, numturns);
+      if (oldpriorcount == newpriors.size) {
+        goalrec.priorstable += 1;
+      } else {
+        goalrec.priorstable = 0;
+      }
+      goalrec.priorcount = newpriors.size;
+      console.log('MERGE', goaltok, oldpriorcount, '->', newpriors.size, '/', goalrec.priorstable);
       goalmet = 1;
     }
   }
@@ -162,7 +171,9 @@ G.run((function*() {
             goalruns: 0,
             goalsucc: 0,
             first: 99999,
-            cmd: turncmd
+            cmd: turncmd,
+            priorcount: 0,
+            priorstable: 0,
           };
           turnscore += 1;
         }
@@ -171,13 +182,12 @@ G.run((function*() {
         // tokens have priority if they are uncommon and haven't had many goal attempts or successes
         updatetokfreq(token, stat);
         // record best walkthrough
-        if (numturns < stat.first) {
-          console.log(token, numturns, '<', stat.first, '(', stat.count, ')');
+        if (numturns <= stat.first) {
+          console.log(token, numturns, '<=', stat.first, '(', stat.count, ')');
           // if this is 1st turn, don't bother replaying
           if (numturns == 0) {
             stat.best = null;
           } else {
-            //if (stat.best) console.log('MERGE', token, playthru.merge(stat.best, stat.first, numturns));
             stat.best = playthru;
           }
           stat.first = numturns;
@@ -264,7 +274,7 @@ G.run((function*() {
         if (stat.first < numturns)
           console.log('can get', tok, 'in', stat.first, 'turns <', numturns);
       }*/
-      var shuffle = Math.random() < (2+goalrec.first*goalrec.first) / (1+goalrec.goalsucc);
+      var shuffle = Math.random() < (2+goalrec.first*goalrec.first) / (1+goalrec.priorcount+goalrec.goalruns);
       if (shuffle)
         turncmd = rndchoice(goalrec.best.turns, goalrec.first+1).cmd;
       else
