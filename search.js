@@ -48,7 +48,6 @@ G.run((function*() {
   var numplays = 0;	// # of plays in all games
   var allcmdstats = {};	// command -> record
   var ignorecmds = {}; // no longer used JSON.parse(fs.readFileSync('ignorecmds.json'));
-  var rankedcmds;
   var playthru;		// current game Playthrough
   var alltokstats = {}; // token -> record
   var tokfreq = new SortedMap();	// tokens sorted by score
@@ -65,8 +64,24 @@ G.run((function*() {
   var turnscore;	// current turn score
   var turnmods;		// # of VM modifications for current turn
   var turntoks;		// tokens for current turn
+  
   function logtoken(token) {
-    turntoks.add(token);
+    let stat = alltokstats[token];
+    // new token? create record
+    if (!stat) {
+      stat = alltokstats[token] = {
+        token: token,
+        count: 0,
+        goalruns: 0,
+        goalsucc: 0,
+        first: 99999,
+        cmd: turncmd,
+        priorcount: 0,
+        priorstable: 0,
+      };
+      turnscore += 1;
+    }
+    turntoks.add(stat.token); // string interning
   }
   game.log = (a,b,c) => {
     turnmods += 1;
@@ -74,16 +89,6 @@ G.run((function*() {
     logtoken(a+"_"+b+"_"+c);
   }
   function newgame() {
-    // sort commands by rank (best first)
-    if ((numplays++ & 15) == 0) {
-      rankedcmds = []
-      for (var cmd in allcmdstats) {
-        var cmdstats = allcmdstats[cmd];
-        if (cmdstats.score > 0 && !ignorecmds[cmd])
-          rankedcmds.push(cmdstats);
-      }
-      rankedcmds.sort((a,b) => { return b.score - a.score });
-    }
     // reset other stuff
     playtoks = new Set();
     playvocab = [];
@@ -163,20 +168,7 @@ G.run((function*() {
         };
       // look at all tokens for this turn
       for (let token of turntoks) {
-        // new token?
         let stat = alltokstats[token];
-        if (!stat) {
-          stat = alltokstats[token] = {
-            count: 0,
-            goalruns: 0,
-            goalsucc: 0,
-            first: 99999,
-            cmd: turncmd,
-            priorcount: 0,
-            priorstable: 0,
-          };
-          turnscore += 1;
-        }
         stat.count += 1;
         // update token in sorted list
         // tokens have priority if they are uncommon and haven't had many goal attempts or successes
@@ -196,11 +188,10 @@ G.run((function*() {
         // new token for this cmd?
         if (!thiscmdstats.toks[token]) {
           thiscmdstats.toks[token] = 1;
-          turnscore += 1;
+          thiscmdstats.score += 1; // TODO: not used
         }
       }
-      thiscmdstats.score += turnscore;
-      console.log(turncmd,'+',turnscore,'=',thiscmdstats.score);
+      //console.log(turncmd,'+',turnscore,'=',thiscmdstats.score);
       // add to playtoks
       for (let token of turntoks) {
         playtoks.add(token);
@@ -282,17 +273,6 @@ G.run((function*() {
       console.log(turncmd, shuffle?"(shuffle)":"(replay)");
       return turncmd;
     }
-    // get command ranked by "goodness"
-    /*
-    if (rankedcmds.length && Math.random() < 0.5) {
-      var i = Math.floor(Math.pow(Math.random(), 3) * rankedcmds.length);
-      turncmd = rankedcmds[i].cmd;
-      //if (playvocab.size > 10 && Math.random() < 0.5)
-        //turncmd += ' ' + rndchoice(Array.from(playvocab));
-      console.log(turncmd, '=', rankedcmds[i].score, '#', i);
-      return turncmd;
-    }
-    */
     // get totally random command
     turncmd = getrandomcmd();
     console.log(turncmd, "(random)");

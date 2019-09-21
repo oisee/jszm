@@ -22,3 +22,29 @@ Execute, update stats.
 Run command eagerly, fails due to priors.
 Update stats, run later.
 
+
+APPROACH
+
+First, start with randomly-walking commands.
+
+A random command is a series of words (N=2 currently) from the game's vocab
+file.
+
+There is a random (0.5) chance that a word is from recently-seen vocab
+words.
+
+We record the transcript for each playthrough.
+
+We add tokens to a sorted list, associated with the playthrough that
+generated them. The shortest playthrough is recorded.
+
+Each run has a "goal token" that we try to recreate.
+
+When we rerun a playthrough, we pick commands out-of-order.
+
+If the tokens we see don't change from play to play, we increment the
+"stable" counter.
+
+When a goal token is more stable, we shuffle less often and just replay in
+order.
+
