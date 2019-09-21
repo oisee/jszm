@@ -45,7 +45,7 @@ var game=new JSZM(story);
 function GameRunner() {
 
   var vocab;		// vocabulary for game
-  var vocabdict = {};	// .. in dictionary form
+  var vocabdict = new Set();	// .. in dictionary form
   var maxturns = 50;	// max turns in current game
   var usewords = false;	// use word output as tokens?
   var wordtoklen = 25;  // truncate phrases to this length
@@ -112,7 +112,7 @@ function GameRunner() {
   this.newgame = function() {
     // reset other stuff
     playtoks = new Set();
-    playvocab = [];
+    playvocab = new Set();
     //playvocab = ['pull','move','rug']; // TODO: CHEATER
     turntoks = new Set();
     turnmods = 0;
@@ -226,15 +226,16 @@ function GameRunner() {
     }
     // convert to token
     if (usewords) {
-      if (x.length >= 3 && !vocabdict[x] && !parseInt(x)) {
+      if (x.length >= 3 && !vocabdict.has(x) && !parseInt(x)) {
         let tok = x.substr(0, wordtoklen).trim();
         logtoken(tok);
       }
     }
     // split tokens, see if this is a vocab word
     for (var w of x.split(/[^a-z]/i)) {
-      if (w && (w=w.toLowerCase()) && vocabdict[w]) playvocab.push(w);
+      if (w && w.length >= 3 && (w=w.toLowerCase()) && vocabdict.has(w)) playvocab.add(w);
     }
+    //console.log("VOCAB",Array.from(playvocab).join(' '));
     // print to console
     Out.write(x,"ascii");
   };
@@ -244,24 +245,26 @@ function GameRunner() {
       var keys = game.vocabulary.keys();
       vocab=Array.from(keys).filter((s) => { return /^\w/.exec(s) });
       vocab=vocab.filter((s) => { return !/^(restor|restar|save|q|quit)$/.exec(s) });
-      vocab.forEach((w) => { vocabdict[w]=1; });
+      vocab.forEach((w) => { vocabdict.add(w); });
     }
   }
-  function rndchoice(list, len) {
-    if (!len) len = list.length;
-    var i = Math.floor(Math.random() * len);
+  function rndchoice(list, first, len) {
+    if (!first) first = 0;
+    if (!len) len = list.length - first;
+    var i = Math.floor(first + Math.random() * len);
     return list[i];
   }
   function getrandomcmd() {
     // use recently seen words more often
-    var words1 = playvocab;
+    var words1 = Array.from(playvocab);
     var words2 = vocab;
     do {
       var s = "";
       for (let i=0; i<2; i++) {
         if (i>0) s += " ";
+        // use vocab? recent words first
         if (words1 && Math.random() < prob_vocab)
-          s += rndchoice(words1);
+          s += rndchoice(words1, Math.random()*words1.length);
         else
           s += rndchoice(words2);
         if (Math.random() < prob_end)
@@ -283,7 +286,7 @@ function GameRunner() {
       }*/
       var shuffle = Math.random() < (2+goalrec.first*goalrec.first) / (1+goalrec.priorcount+goalrec.goalruns);
       if (shuffle)
-        turncmd = rndchoice(goalrec.best.turns, goalrec.first+1).cmd;
+        turncmd = rndchoice(goalrec.best.turns, 0, goalrec.first+1).cmd;
       else
         turncmd = goalrec.best.turns[numturns].cmd;
       console.log(turncmd, shuffle?"(shuffle)":"(replay)");
