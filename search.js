@@ -44,6 +44,11 @@ G.run((function*() {
   var game=new JSZM(story);
   var vocab;		// vocabulary for game
   var vocabdict = {};	// .. in dictionary form
+  var maxturns = 30;	// max turns in current game
+  var usewords = false; // use word output as tokens?
+  var usetech = true;   // use vm tech output?
+  var prob_vocab = 0.5; // probability of a recent vocab word
+  var prob_end = 0.5;   // probability of ending the command
 
   var numplays = 0;	// # of plays in all games
   var allcmdstats = {};	// command -> record
@@ -55,7 +60,6 @@ G.run((function*() {
   var playtoks;		// tokens for current game
   var playvocab;	// vocabulary for current game (intersects game vocab)
   var numturns;		// # of turns in current game
-  var maxturns = 20;	// max turns in current game
   var goaltok;		// current goal token
   var goalrec;		// current token record from 'alltokstats'
   var goalmet;		// 1 = goal met
@@ -86,7 +90,7 @@ G.run((function*() {
   game.log = (a,b,c) => {
     turnmods += 1;
     if (a == 'pf') return; // use as evidence of activity, but don't record
-    logtoken(a+"_"+b+"_"+c);
+    if (usetech) logtoken(a+"_"+b+"_"+c);
   }
   function newgame() {
     // reset other stuff
@@ -174,8 +178,8 @@ G.run((function*() {
         // tokens have priority if they are uncommon and haven't had many goal attempts or successes
         updatetokfreq(token, stat);
         // record best walkthrough
-        if (numturns <= stat.first) {
-          console.log(token, numturns, '<=', stat.first, '(', stat.count, ')');
+        if (numturns < stat.first) {
+          console.log(token, numturns, '<', stat.first, '(', stat.count, ')');
           // if this is 1st turn, don't bother replaying
           if (numturns == 0) {
             stat.best = null;
@@ -211,9 +215,11 @@ G.run((function*() {
       throw new DeadError();
     }
     // convert to token
-    if (x.length >= 3 && !vocabdict[x] && !parseInt(x)) {
-      let tok = x.substr(0, 32).trim();
-      logtoken(tok);
+    if (usewords) {
+      if (x.length >= 3 && !vocabdict[x] && !parseInt(x)) {
+        let tok = x.substr(0, 32).trim();
+        logtoken(tok);
+      }
     }
     // split tokens, see if this is a vocab word
     for (var w of x.split(/[^a-z]/i)) {
@@ -244,11 +250,11 @@ G.run((function*() {
       var s = "";
       for (let i=0; i<2; i++) {
         if (i>0) s += " ";
-        if (words1 && Math.random() < 0.5)
+        if (words1 && Math.random() < prob_vocab)
           s += rndchoice(words1);
         else
           s += rndchoice(words2);
-        if (Math.random() < 0.5)
+        if (Math.random() < prob_end)
           break;
       }
     } while (ignorecmds[s]);
