@@ -601,7 +601,7 @@ JSZM.prototype={
           break;
         case 227: // PUTP
           propfind();
-          this.log("pp",op2,op3);
+          this.log("pp",op0,op1);
           if(mem[op3-1]&32) this.put(op3,op2);
           else mem[op3]=op2;
           break;

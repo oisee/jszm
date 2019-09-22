@@ -9,6 +9,8 @@ const SortedMap=require('sorted-map');
 const In=readline.createInterface({input: process.stdin});
 const Out=process.stdout;
 
+const DEBUG=false;
+
 G.defineER(fs,"readFile","readFileG",2);
 G.defineER(fs,"writeFile","writeFileG",3);
 G.defineR(In,"question","questionG",1);
@@ -47,13 +49,13 @@ function GameRunner() {
   var vocab;		// vocabulary for game
   var vocabdict = new Set();	// .. in dictionary form
   var maxturns = 50;	// max turns in current game
-  var usewords = false;	// use word output as tokens?
+  var usewords = !true;	// use word output as tokens?
   var wordtoklen = 25;  // truncate phrases to this length
   var usetech = true;	// use vm tech output?
   var usecondtok = true; // use conditional (__) tokens?
   var prob_vocab = 0.5; // probability of a recent vocab word
   var prob_end = 0.5;   // probability of ending the command
-  var stablethresh = 50; // token considered stable after this many turns
+  var stablethresh = 10; // token considered stable after this many turns
 
   var numplays = 0;	// # of plays in all games
   var ignorecmds = {}; // no longer used JSON.parse(fs.readFileSync('ignorecmds.json'));
@@ -73,6 +75,13 @@ function GameRunner() {
   var turnscore;	// current turn score
   var turnmods;		// # of VM modifications for current turn
   var turntoks;		// tokens for current turn
+  
+  function debug(...args) {
+    if (DEBUG) console.log.apply(console, args);
+  }
+  function info(...args) {
+    console.log.apply(console, args);
+  }
 
   function addtoken(token) {
     let stat = alltokstats[token];
@@ -89,15 +98,16 @@ function GameRunner() {
         priorstable: 0,
       };
       turnscore += 1;
+      info("NEWTOKEN",token,turncmd);
     }
     turntoks.add(stat.token); // string interning
   }  
   function logtoken(token) {
     addtoken(token);
     // log all prior tokens, combined
-    if (usecondtok && stabletoks.has(token)) {
+    if (usecondtok && stabletoks.has(token) && token.startsWith('mv_')) {
       for (var priortok of playtoks) {
-        if (stabletoks.has(priortok) && priortok.indexOf(token) < 0) {
+        if (stabletoks.has(priortok) && priortok.indexOf(token) < 0 && priortok.startsWith('mv_')) {
           var key = priortok + "__" + token;
           if (!turntoks.has(key)) { addtoken(key); } 
         }
@@ -128,28 +138,33 @@ function GameRunner() {
     if (goalrec) {
       goalrec.goalruns += 1;
       updatetokfreq(goaltok, goalrec);
-      console.log("GOAL:",goalrec.cmd,goal,goalrec.count,goalrec.first,goaltok);
+      debug("GOAL:",goalrec.cmd,goal,goalrec.count,goalrec.first,goaltok);
     }
+  }
+  function showcommands() {
+    info('COMMANDS', playthru.turns.slice(0,numturns+1).map((t) => { return t.cmd }).join(', '));
   }
   function metgoal() {
     if (!goalmet) {
       goalrec.goalsucc += 1;
-      console.log("Goal success:",goaltok,goalrec.goalsucc,'/',goalrec.goalruns,'turn #',numturns);
-      // if we're already stable, stop testing
-      if (goalrec.priorstable < stablethresh) {
+      debug("Goal success:",goaltok,goalrec.goalsucc,'/',goalrec.goalruns,'turn #',numturns);
+      // is this token stable yet?
+      var thresh = stablethresh * (goalrec.first+1);
+      if (goalrec.priorstable < thresh) {
         var oldpriorcount = goalrec.priorcount | 0;
         var newpriors = playthru.merge(goalrec.best, goalrec.first, numturns);
         if (oldpriorcount == newpriors.size) {
           goalrec.priorstable += 1;
         } else {
           goalrec.priorstable = 0;
+          info('RESET', goaltok, oldpriorcount, '->', newpriors.size);
         }
         goalrec.priorcount = newpriors.size;
-        console.log('MERGE', goaltok, oldpriorcount, '->', newpriors.size, '/', goalrec.priorstable);
         stabletoks.delete(goaltok);
-      } else {
+      } else if (!stabletoks.has(goaltok)) {
         stabletoks.add(goaltok);
-        console.log("STABLE", goaltok);
+        info("STABLE", goaltok);
+        showcommands();
       }
       goalmet = 1;
     }
@@ -157,7 +172,8 @@ function GameRunner() {
   this.endgame = function() {
     // did we not meet goal?
     if (goaltok && !goalmet) {
-      console.log("Goal failure:",goaltok,goalrec.goalsucc,'/',goalrec.goalruns);
+      debug("Goal failure:",goaltok,goalrec.goalsucc,'/',goalrec.goalruns);
+      goalrec.priorstable = Math.max(0, goalrec.priorstable - 1);
     }
   }
   function updatetokfreq(token, stat) {
@@ -183,7 +199,7 @@ function GameRunner() {
     if (/*turnmods == 0 || */!turncmd) {
       if (turncmd) {
         //ignorecmds[turncmd] = 1;
-        console.log("IGNORING", turncmd);
+        debug("IGNORING", turncmd);
       }
     } else {
       // look at all tokens for this turn
@@ -195,7 +211,8 @@ function GameRunner() {
         updatetokfreq(token, stat);
         // record best walkthrough
         if (numturns < stat.first) {
-          console.log('REDUCE', token, numturns, '<', stat.first, '(', stat.goalsucc, '/', stat.goalruns, '/', stat.count, ')');
+          info('REDUCE', token, numturns, '<', stat.first, '(', stat.goalsucc, '/', stat.goalruns, '/', stat.count, ')');
+          showcommands();
           // if this is 1st turn, don't bother replaying
           if (numturns == 0) {
             stat.best = null;
@@ -237,7 +254,7 @@ function GameRunner() {
     }
     //console.log("VOCAB",Array.from(playvocab).join(' '));
     // print to console
-    Out.write(x,"ascii");
+    if (DEBUG) Out.write(x,"ascii");
   };
   function makevocab() {
     // create word list if not present
@@ -278,23 +295,17 @@ function GameRunner() {
     makevocab();
     // if we have a goal, get next command from playthrough
     if (goalrec && goalrec.best && numturns <= goalrec.first) {
-    /*
-      for (var tok in goalrec.best.turns[numturns].toks) {
-        var stat = alltokstats[tok];
-        if (stat.first < numturns)
-          console.log('can get', tok, 'in', stat.first, 'turns <', numturns);
-      }*/
       var shuffle = Math.random() < (2+goalrec.first*goalrec.first) / (1+goalrec.priorcount+goalrec.goalruns);
       if (shuffle)
         turncmd = rndchoice(goalrec.best.turns, 0, goalrec.first+1).cmd;
       else
         turncmd = goalrec.best.turns[numturns].cmd;
-      console.log(turncmd, shuffle?"(shuffle)":"(replay)");
+      debug(turncmd, shuffle?"(shuffle)":"(replay)");
       return turncmd;
     }
     // get totally random command
     turncmd = getrandomcmd();
-    console.log(turncmd, "(random)");
+    debug(turncmd, "(random)");
     return turncmd;
     //return yield In.questionG("");
   };
