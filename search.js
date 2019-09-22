@@ -55,7 +55,7 @@ function GameRunner() {
   var usecondtok = true; // use conditional (__) tokens?
   var prob_vocab = 0.5; // probability of a recent vocab word
   var prob_end = 0.5;   // probability of ending the command
-  var stablethresh = 10; // token considered stable after this many turns
+  var stablethresh = 5; // token considered stable after this many turns (per turn)
 
   var numplays = 0;	// # of plays in all games
   var ignorecmds = {}; // no longer used JSON.parse(fs.readFileSync('ignorecmds.json'));
@@ -94,8 +94,7 @@ function GameRunner() {
         goalsucc: 0,
         first: 99999,
         cmd: turncmd,
-        priorcount: 0,
-        priorstable: 0,
+        stablecount: 0,
       };
       turnscore += 1;
       info("NEWTOKEN",token,turncmd);
@@ -150,18 +149,8 @@ function GameRunner() {
       debug("Goal success:",goaltok,goalrec.goalsucc,'/',goalrec.goalruns,'turn #',numturns);
       // is this token stable yet?
       var thresh = stablethresh * (goalrec.first+1);
-      if (goalrec.priorstable < thresh) {
-        var oldpriorcount = goalrec.priorcount | 0;
-        var newpriors = playthru.merge(goalrec.best, goalrec.first, numturns);
-        if (oldpriorcount == newpriors.size) {
-          goalrec.priorstable += 1;
-        } else {
-          goalrec.priorstable = 0;
-          info('RESET', goaltok, oldpriorcount, '->', newpriors.size);
-        }
-        goalrec.priorcount = newpriors.size;
-        stabletoks.delete(goaltok);
-      } else if (!stabletoks.has(goaltok)) {
+      goalrec.stablecount += 1;
+      if (goalrec.stablecount >= thresh && !stabletoks.has(goaltok)) {
         stabletoks.add(goaltok);
         info("STABLE", goaltok);
         showcommands();
@@ -173,7 +162,8 @@ function GameRunner() {
     // did we not meet goal?
     if (goaltok && !goalmet) {
       debug("Goal failure:",goaltok,goalrec.goalsucc,'/',goalrec.goalruns);
-      goalrec.priorstable = Math.max(0, goalrec.priorstable - 1);
+      goalrec.stablecount = 0;
+      stabletoks.delete(goaltok);
     }
   }
   function updatetokfreq(token, stat) {
@@ -295,7 +285,7 @@ function GameRunner() {
     makevocab();
     // if we have a goal, get next command from playthrough
     if (goalrec && goalrec.best && numturns <= goalrec.first) {
-      var shuffle = Math.random() < (2+goalrec.first*goalrec.first) / (1+goalrec.priorcount+goalrec.goalruns);
+      var shuffle = Math.random() < (2+goalrec.first*goalrec.first) / (1+goalrec.goalsucc);
       if (shuffle)
         turncmd = rndchoice(goalrec.best.turns, 0, goalrec.first+1).cmd;
       else
