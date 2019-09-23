@@ -22,8 +22,8 @@ class Playthrough {
   constructor() {
     this.turns = [];
   }
-  addturn(cmd, toks) {
-    this.turns.push({cmd:cmd, toks:new Set(toks)});
+  addturn(cmd, toks, replay) {
+    this.turns.push({cmd:cmd, toks:new Set(toks), replay:replay});
   }
   // TODO: same merge 2x in a row unneccessary
   merge(former, formerdepth, newdepth) {
@@ -73,9 +73,9 @@ function GameRunner() {
   var goalmet;		// 1 = goal met
   
   var turncmd;		// last game command
-  var turnscore;	// current turn score
   var turnmods;		// # of VM modifications for current turn
   var turntoks;		// tokens for current turn
+  var turnisreplay;	// true if current turn is a replay
   
   function debug(...args) {
     if (DEBUG) console.log.apply(console, args);
@@ -98,8 +98,8 @@ function GameRunner() {
         cmd: turncmd,
         stablecount: 0,
       };
-      turnscore += 1;
       info("NEWTOKEN",token,turncmd);
+      showcommands();
     }
     turntoks.add(stat.token); // string interning
   }
@@ -133,7 +133,6 @@ function GameRunner() {
     playstate = new Map();
     turntoks = new Set();
     turnmods = 0;
-    turnscore = 0;
     numturns = -1;
     turncmd = null;
     playthru = new Playthrough();
@@ -195,7 +194,7 @@ function GameRunner() {
     if (numturns < 0)
       turnmods = 0;
     else
-      playthru.addturn(turncmd, turntoks);
+      playthru.addturn(turncmd, turntoks, turnisreplay);
     // did we hit our goal?
     if (goaltok && turntoks.has(goaltok)) {
       metgoal();
@@ -235,7 +234,6 @@ function GameRunner() {
     }
     // reset for next turn
     turntoks = new Set();
-    turnscore = 0;
     turnmods = 0;
     numturns++;
     if (numturns >= maxturns) throw new NoMoreTurns();
@@ -299,18 +297,37 @@ function GameRunner() {
     committurn(1);
     makevocab();
     // if we have a goal, get next command from playthrough
-    var op;
+    let op;
+    turnisreplay = false;
     if (goalrec && goalrec.best && numturns <= goalrec.first) {
-      // get random/shuffled command?
-      var rnd = Math.random() < (2+goalrec.first*goalrec.first) / (1+goalrec.goalsucc);
-      if (rnd) {
-        if (Math.random() < 0.75) { // shuffle = pick from best playthru at random
-          turncmd = rndchoice(goalrec.best.turns, 0, goalrec.first+1).cmd;
-          op = "(shuffle)";
+      let best = goalrec.best;
+      let turn = goalrec.best.turns[numturns];
+      // on first attempts, just stick the last command(s) at the end
+      if (goalrec.goalruns <= 2) {
+        if (turn.replay) {
+          turncmd = turn.cmd;
+          op = "(Replay)";
+          turnisreplay = true;
+        } else {
+          if (goalrec.goalruns < 2 || goalrec.first == 0)
+            turncmd = best.turns[goalrec.first].cmd; // alternate last 2 commands
+          else
+            turncmd = best.turns[goalrec.first - (numturns&1)].cmd; // last command
+          op = "(Last)";
         }
-      } else if (Math.random() < 0.5) { // replay = pick from playthru in order
-        turncmd = goalrec.best.turns[numturns].cmd;
-        op = "(replay)";
+      } else {
+        // get random/shuffled command?
+        let rnd = Math.random() < (2+goalrec.first*goalrec.first) / (1+goalrec.goalsucc+(turn.replay?100:0));
+        if (rnd) {
+          if (Math.random() < 0.75) { // shuffle = pick from best playthru at random
+            turncmd = rndchoice(best.turns, 0, goalrec.first+1).cmd;
+            op = "(shuffle)";
+          }
+        } else { // replay = pick from playthru in order
+          turncmd = turn.cmd;
+          op = "(replay)";
+          turnisreplay = true;
+        }
       }
     }
     // get totally random command
@@ -318,7 +335,7 @@ function GameRunner() {
       turncmd = getrandomcmd();
       op = "(random)";
     }
-    debug(turncmd, op);
+    debug('CMD', numturns, turncmd, op, goaltok);
     return turncmd;
     //return yield In.questionG("");
   };
