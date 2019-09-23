@@ -343,7 +343,7 @@ JSZM.prototype={
       if(x==0) ds.push(y);
       else if(x<16) cs[0].local[x-1]=y;
       else {
-        //console.log("*store",x,y);
+        if (x>=16&&x<256) this.log("store",x,0);
         this.put(globals+2*x,y);
       }
     };
@@ -356,7 +356,7 @@ JSZM.prototype={
       if(x==0) ds[ds.length-1]=y;
       else if(x<16) cs[0].local[x-1]=y;
       else {
-        //console.log("*xstore",x,y);
+        if (x>=16&&x<256) this.log("store",x,1);
         this.put(globals+2*x,y);
       }
     };

@@ -129,7 +129,7 @@ function GameRunner() {
     // reset other stuff
     playtoks = new Set();
     playvocab = new Set();
-    playvocab = new Set(['pull','move','rug','open','trap','get','sword']); // TODO: CHEATER
+    //playvocab = new Set(['pull','move','rug','open','trap','get','sword']); // TODO: CHEATER
     playstate = new Map();
     turntoks = new Set();
     turnmods = 0;
@@ -299,25 +299,25 @@ function GameRunner() {
     // if we have a goal, get next command from playthrough
     let op;
     turnisreplay = false;
-    if (goalrec && goalrec.best && numturns <= goalrec.first) {
+    if (goalrec && goalrec.best) {
       let best = goalrec.best;
       let turn = goalrec.best.turns[numturns];
       // on first attempts, just stick the last command(s) at the end
-      if (goalrec.goalruns <= 2) {
+      if (goalrec.goalruns <= 2 && turn) {
         if (turn.replay) {
           turncmd = turn.cmd;
           op = "(Replay)";
           turnisreplay = true;
         } else {
           if (goalrec.goalruns < 2 || goalrec.first == 0)
-            turncmd = best.turns[goalrec.first].cmd; // alternate last 2 commands
+            turncmd = best.turns[goalrec.first].cmd; // last command
           else
-            turncmd = best.turns[goalrec.first - (numturns&1)].cmd; // last command
+            turncmd = best.turns[goalrec.first - (numturns&1)].cmd; // alternate last two commands
           op = "(Last)";
         }
-      } else {
+      } else if (numturns <= goalrec.first) {
         // get random/shuffled command?
-        let rnd = Math.random() < (2+goalrec.first*goalrec.first) / (1+goalrec.goalsucc+(turn.replay?100:0));
+        let rnd = Math.random() < (2 + goalrec.first*goalrec.first) / (1 + goalrec.goalsucc + goalrec.goalruns*turn.replay);
         if (rnd) {
           if (Math.random() < 0.75) { // shuffle = pick from best playthru at random
             turncmd = rndchoice(best.turns, 0, goalrec.first+1).cmd;
