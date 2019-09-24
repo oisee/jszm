@@ -5,6 +5,7 @@ const JSZM=require("./jszm.js"); // version 2
 const readline=require("readline");
 const fs=require("fs");
 const SortedMap=require('sorted-map');
+const {parse, stringify} = require('flatted/cjs');
 
 const In=readline.createInterface({input: process.stdin});
 const Out=process.stdout;
@@ -41,7 +42,9 @@ class Playthrough {
   }
 }
 
-var story=fs.readFileSync(process.argv[2]);
+var story_filename=process.argv[2];
+var checkp_filename=process.argv[3];
+var story=fs.readFileSync(story_filename);
 var game=new JSZM(story);
 
 function GameRunner() {
@@ -57,13 +60,13 @@ function GameRunner() {
   var prob_end = 0.5;   // probability of ending the command
   var stablethresh = 5; // token considered stable after this many successes (per turn)
 
-  var numplays = 0;	// # of plays in all games
   var ignorecmds = {}; // no longer used JSON.parse(fs.readFileSync('ignorecmds.json'));
-  var playthru;		// current game Playthrough
   var alltokstats = {}; // token -> record
   var stabletoks = new Set();
   var tokfreq = new SortedMap();	// tokens sorted by score
+  var numplays = 0;
 
+  var playthru;		// current game Playthrough
   var playtoks;		// tokens for current game
   var playvocab;	// vocabulary for current game (intersects game vocab)
   var playstate;	// current state tokens of game
@@ -72,10 +75,11 @@ function GameRunner() {
   var goalrec;		// current token record from 'alltokstats'
   var goalmet;		// 1 = goal met
   
-  var turncmd;		// last game command
+  var turncmd = null;	// last game command
   var turnmods;		// # of VM modifications for current turn
   var turntoks;		// tokens for current turn
   var turnisreplay;	// true if current turn is a replay
+  
   
   function debug(...args) {
     if (DEBUG) console.log.apply(console, args);
@@ -83,9 +87,26 @@ function GameRunner() {
   function info(...args) {
     console.log.apply(console, args);
   }
-
+  this.savestate = function() {
+    return stringify({numplays:numplays, alltokstats:alltokstats, stabletoks:Array.from(stabletoks.keys()), tokfreq:tokfreq.slice(0)});
+  }
+  this.loadstate = function(s) {
+    numplays = s.numplays;
+    alltokstats = s.alltokstats;
+    for (var tok in s.stabletoks) { stabletoks.add(s); }
+    for (var entry in s.tokfreq) { tokfreq.set(entry.key, entry.value); }
+  }
+  // load checkpoint?
+  if (checkp_filename) {
+    this.loadstate(parse(fs.readFileSync(checkp_filename)));
+  }
+  this.checkpoint = function() {
+    info("CHECKPOINT", numplays);
+    fs.writeFileSync(story_filename+".save.tmp", this.savestate());
+    fs.renameSync(story_filename+".save.tmp", story_filename+".save");
+  }
   function addtoken(token) {
-    if (!turncmd) return; // don't record tokens before 1st turn
+    if (turncmd === null) return; // don't record tokens before 1st turn
     let stat = alltokstats[token];
     // new token? create record
     if (!stat) {
@@ -174,11 +195,8 @@ function GameRunner() {
     if (goaltok && !goalmet) {
       debug("Goal failure:",goaltok,goalrec.goalsucc,'/',goalrec.goalruns);
       goalrec.stablecount = Math.max(goalrec.stablecount-2, 0);
-      /*if (stabletoks.has(goaltok)) {
-        info("DESTABLE", goaltok, goalrec.stablecount);
-        showcommands();
-      }*/
     }
+    if ((++numplays % 10000) == 0) this.checkpoint();
   }
   function updatetokfreq(token, stat) {
     if (!stat) stat = alltokstats[token];
@@ -283,7 +301,7 @@ function GameRunner() {
       for (let i=0; i<2; i++) {
         if (i>0) s += " ";
         // use vocab? recent words first
-        if (words1 && Math.random() < prob_vocab)
+        if (words1.length && Math.random() < prob_vocab)
           s += rndchoice(words1, Math.random()*words1.length);
         else
           s += rndchoice(words2);

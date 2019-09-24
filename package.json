@@ -23,6 +23,7 @@
     "genasync": "^1.3.0"
   },
   "dependencies": {
+    "flatted": "^2.0.1",
     "sorted-map": "^0.1.8"
   }
 }

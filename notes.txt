@@ -57,3 +57,6 @@ e.g. "GET SWORD then TROLL ROOM"
 Only merge tokens that are stable.
 When we merge A and B we could merge their playthroughs, too.
 
+We need both text and VM tokens, because they both give cues.
+"Taken" isn't enough, but "the trap door is closed" is useful info.
+
