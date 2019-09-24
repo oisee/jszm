@@ -80,10 +80,12 @@
 
 const JSZM_Version={major:2,minor:0,subminor:2,timestamp:1480624305074};
 
+class JSZMError extends Error { }
+
 function JSZM(arr) {
   var mem;
   mem=this.memInit=new Uint8Array(arr);
-  if(mem[0]!=3) throw new Error("Unsupported Z-code version.");
+  if(mem[0]!=3) throw new JSZMError("Unsupported Z-code version.");
   this.byteSwapped=!!(mem[1]&1);
   this.statusType=!!(mem[1]&2);
   this.serial=String.fromCharCode(...mem.slice(18,24));
@@ -197,7 +199,8 @@ JSZM.prototype={
   },
   highlight: ()=>[],
   isTandy: false,
-  log: ()=>{},
+  log: (a,b,c)=>{},
+  logbranch: (pc,taken)=>{},
   mem: null,
   memInit: null,
   parseVocab: function(s) {
@@ -311,6 +314,8 @@ JSZM.prototype={
       var x=pcgetb();
       if(x&128) p=!p;
       if(x&64) x&=63; else x=((x&63)<<8)|pcgetb();
+      p = !!p;
+      if (this.logbranch(pc,p)) p = !p;
       if(p) return;
       if(x==0 || x==1) return ret(x);
       if(x&0x2000) x-=0x4000;
@@ -643,7 +648,7 @@ JSZM.prototype={
           if(this.screen) yield*this.screen(op0);
           break;
         default:
-          throw new Error("JSZM: Invalid Z-machine opcode");
+          throw new JSZMError("JSZM: Invalid Z-machine opcode");
       }
     }
 

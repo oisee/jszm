@@ -15,8 +15,16 @@ G.defineR(In,"question","questionG",1);
 G.run((function*() {
   var story=yield fs.readFileG(process.argv[2],{});
   var game=new JSZM(story);
+  var branches={};
   game.log=function(a,b,c) {
-    console.log(a,b,c)
+    console.log(a,b,c);
+  }
+  game.logbranch=function(pc,cond) {
+    var key = pc+"_"+cond;
+    if (!branches[key]) {
+      branches[key] = 1;
+      console.log(pc,cond);
+    }
   }
   game.print=function*(x) {
     Out.write(x,"ascii");
