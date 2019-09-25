@@ -203,6 +203,31 @@ JSZM.prototype={
   logbranch: (pc,taken)=>{},
   mem: null,
   memInit: null,
+  mv: function(x,y) {
+    var w,z;
+    var mem = this.mem;
+    var objects=this.getu(10)-2+55;
+    // Remove from old FIRST-NEXT chain
+    if(z=mem[objects+x*9+4]) {
+      if(mem[objects+z*9+6]==x) { // is x.loc.first=x?
+        mem[objects+z*9+6]=mem[objects+x*9+5]; // x.loc.first=x.next
+      } else {
+        z=mem[objects+z*9+6]; // z=x.loc.first
+        while(z!=x) {
+          w=z;
+          z=mem[objects+z*9+5]; // z=z.next
+        }
+        mem[objects+w*9+5]=mem[objects+x*9+5]; // w.next=x.next
+      }
+    }
+    // Insert at beginning of new FIRST-NEXT chain
+    if(mem[objects+x*9+4]=y) { // x.loc=y
+      mem[objects+x*9+5]=mem[objects+y*9+6]; // x.next=y.first
+      mem[objects+y*9+6]=x; // y.first=x
+    } else {
+      mem[objects+x*9+5]=0; // x.next=0
+    }
+  },
   parseVocab: function(s) {
     this.vocabulary=new Map();
     
@@ -272,28 +297,8 @@ JSZM.prototype={
       initRng();
     };
     move=(x,y) => {
-      var w,z;
       this.log("mv",x,y);
-      // Remove from old FIRST-NEXT chain
-      if(z=mem[objects+x*9+4]) {
-        if(mem[objects+z*9+6]==x) { // is x.loc.first=x?
-          mem[objects+z*9+6]=mem[objects+x*9+5]; // x.loc.first=x.next
-        } else {
-          z=mem[objects+z*9+6]; // z=x.loc.first
-          while(z!=x) {
-            w=z;
-            z=mem[objects+z*9+5]; // z=z.next
-          }
-          mem[objects+w*9+5]=mem[objects+x*9+5]; // w.next=x.next
-        }
-      }
-      // Insert at beginning of new FIRST-NEXT chain
-      if(mem[objects+x*9+4]=y) { // x.loc=y
-        mem[objects+x*9+5]=mem[objects+y*9+6]; // x.next=y.first
-        mem[objects+y*9+6]=x; // y.first=x
-      } else {
-        mem[objects+x*9+5]=0; // x.next=0
-      }
+      this.mv(x,y);
     };
     opfetch=(x,y) => {
       if((x&=3)==3) return;
@@ -348,7 +353,7 @@ JSZM.prototype={
       if(x==0) ds.push(y);
       else if(x<16) cs[0].local[x-1]=y;
       else {
-        if (x>=16&&x<256) this.log("store",x,0);
+        //if (x>=16&&x<256) this.log("store",x,pc);
         this.put(globals+2*x,y);
       }
     };
@@ -361,7 +366,7 @@ JSZM.prototype={
       if(x==0) ds[ds.length-1]=y;
       else if(x<16) cs[0].local[x-1]=y;
       else {
-        if (x>=16&&x<256) this.log("store",x,1);
+        //if (x>=16&&x<256) this.log("store",x,pc);
         this.put(globals+2*x,y);
       }
     };

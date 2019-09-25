@@ -62,3 +62,13 @@ We need both text and VM tokens, because they both give cues.
 "Taken" isn't enough, but "the trap door is closed" is useful info.
 
 
+FUZZING MEMORY
+
+After a token becomes stable, things may get boring.
+Fuzzing VM memory helps break the logjam.
+
+We want to reapply operations we've seen before, like
+MOVE and STORE.
+
+If doing so generates new tokens, we can try mixing in
+commands that generate those tokens.

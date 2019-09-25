@@ -19,6 +19,7 @@ G.defineR(In,"question","questionG",1);
 class DeadError extends Error { }
 class NoMoreTurns extends Error { }
 
+// TODO: loadstate doesn't restore classes
 class Playthrough {
   constructor() {
     this.turns = [];
@@ -54,8 +55,9 @@ function GameRunner() {
   var maxturns = 50;	// max turns in current game
   var usewords = true;	// use word output as tokens?
   var wordtoklen = 20;  // truncate phrases to this length
-  var usetech = !true;	// use vm tech output?
+  var usetech = true;	// use vm tech output?
   var usecondtok = !true; // use conditional (__) tokens?
+  var usevmhack = true;	// fuzz the VM too?
   var prob_vocab = 0.5; // probability of a recent vocab word
   var prob_end = 0.5;   // probability of ending the command
   var stablethresh = 5; // token considered stable after this many successes (per turn)
@@ -65,6 +67,7 @@ function GameRunner() {
   var ignorecmds = {}; // no longer used JSON.parse(fs.readFileSync('ignorecmds.json'));
   var alltokstats = {}; // token -> record
   var stabletoks = new Set();
+  var vmtoks = [];
   var tokfreq = new SortedMap();	// tokens sorted by score
   var numplays = 0;
 
@@ -77,6 +80,7 @@ function GameRunner() {
   var goalrec;		// current token record from 'alltokstats'
   var goalmet;		// 1 = goal met
   var curscore;		// current score
+  var hacks;		// list of hacks in current game
   
   var turncmd = null;	// last game command
   var turnmods;		// # of VM modifications for current turn
@@ -97,7 +101,7 @@ function GameRunner() {
   this.loadstate = function(s) {
     numplays = s.numplays;
     alltokstats = s.alltokstats;
-    for (var tok of s.stabletoks) { stabletoks.add(tok); }
+    for (var tok of s.stabletoks) { makestable(tok); }
     for (var tok in s.alltokstats) { updatetokfreq(tok); }
   }
   // load checkpoint?
@@ -152,21 +156,22 @@ function GameRunner() {
       logtoken("@"+key);
     }
   }
-  /*
+  
   game.logbranch = (op,taken) => {
-    return Math.random() < 0.001 ? 1 : 0;
+    //game.log('br',op,taken?1:0);
+    return 0;
+    //return Math.random() < 0.001 ? 1 : 0;
   }
-  */
   this.newgame = function() {
     // reset other stuff
     playtoks = new Set();
     playvocab = new Set();
-    //playvocab = new Set(['pull','move','rug','open','trap','get','sword']); // TODO: CHEATER
     playstate = new Map();
     turntoks = new Set();
     turnmods = 0;
     numturns = -1;
     turncmd = null;
+    hacks = [];
     playthru = new Playthrough();
     // choose a goal token, update statistics
     var goal = tokfreq.slice(0,10);
@@ -180,7 +185,25 @@ function GameRunner() {
     }
   }
   function showcommands() {
+    if (hacks.length) info("HACKS",hacks.join(' '));
     info('COMMANDS', playthru.turns.slice(0,numturns+1).map((t) => { return t.cmd }).join(', '));
+  }
+  function makestable(tok) {
+    if (!stabletoks.has(tok)) {
+      stabletoks.add(tok);
+      vmtoks = Array.from(stabletoks).filter((tok) => tok.startsWith("@mv_")); // TODO
+      if (playthru) {
+        info("STABLE", goaltok);
+        showcommands();
+      }
+    }
+  }
+  function makeunstable(tok) {
+    if (stabletoks.has(tok)) {
+      stabletoks.delete(goaltok);
+      info("UNSTABLE", goaltok);
+      showcommands();
+    }
   }
   function metgoal() {
     if (!goalmet) {
@@ -189,14 +212,10 @@ function GameRunner() {
       // is this token stable yet?
       var thresh = stablethresh * (goalrec.first+1);
       goalrec.stablecount += 1;
-      if (goalrec.stablecount >= thresh && !stabletoks.has(goaltok)) {
-        stabletoks.add(goaltok);
-        info("STABLE", goaltok);
-        showcommands();
-      } else if (goalrec.stablecount < thresh/2 && stabletoks.has(goaltok)) {
-        stabletoks.delete(goaltok);
-        info("UNSTABLE", goaltok);
-        showcommands();
+      if (goalrec.stablecount >= thresh) {
+        makestable(goaltok);
+      } else if (goalrec.stablecount < thresh/2) {
+        makeunstable(goaltok);
       }
       goalmet = 1;
     }
@@ -331,11 +350,28 @@ function GameRunner() {
     } while (ignorecmds[s]);
     return s;
   }
+  function hackvm() {
+    // hack probability increases as token gets more stable
+    var prob = goalrec && goalrec.stablecount * 0.001;
+    if (goalrec && Math.random() < prob && stabletoks.has(goaltok)) {
+      // choose a stable token to hack with
+      var tok = rndchoice(vmtoks);
+      // move object x to parent y
+      if (tok && tok.startsWith("@mv_")) {
+        var toks = tok.split("_");
+        var x = parseInt(toks[1])
+        var y = parseInt(toks[2])
+        game.mv(x,y);
+        hacks.push(tok);
+      }
+    }
+  }
   game.read=function*() {
     committurn(1);
     if (numturns == maxturns && prescoretok) { turncmd=null; numturns++; return "SCORE"; }
     if (numturns > maxturns) throw new NoMoreTurns();
     makevocab();
+    if (usevmhack) hackvm();
     // if we have a goal, get next command from playthrough
     let op;
     turnisreplay = false;
@@ -402,6 +438,9 @@ function GameRunner() {
       return null;
     }
   };
+  game.restarted = function*() {
+    runner.newgame();
+  }
 }
 
 var runner = new GameRunner();
@@ -409,7 +448,6 @@ var runner = new GameRunner();
 function*GrunOne() {
   {
     try {
-      runner.newgame();
       yield*game.run();
     } catch(e) {
       if (e instanceof DeadError) {
