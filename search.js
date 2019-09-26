@@ -25,21 +25,7 @@ class Playthrough {
     this.turns = [];
   }
   addturn(cmd, toks, replay) {
-    this.turns.push({cmd:cmd, toks:new Set(toks), replay:replay});
-  }
-  // TODO: same merge 2x in a row unneccessary
-  merge(former, formerdepth, newdepth) {
-    var set0 = new Set();
-    var set1 = new Set();
-    for (var i=0; i<formerdepth; i++) {
-      //console.log('SET0',i,former.turns[i]);
-      former.turns[i].toks.forEach((value) => { set0.add(value) });
-    }
-    for (var i=0; i<newdepth; i++) {
-      //console.log('SET1',i,this.turns[i]);
-      this.turns[i].toks.forEach((value) => { if (set0.has(value)) set1.add(value) });
-    }
-    return set1;
+    this.turns.push({cmd:cmd, toks:Array.from(toks), replay:replay});
   }
 }
 
@@ -186,7 +172,7 @@ function GameRunner() {
   }
   function showcommands() {
     if (hacks.length) info("HACKS",hacks.join(' '));
-    info('COMMANDS', playthru.turns.slice(0,numturns+1).map((t) => { return t.cmd }).join(', '));
+    info('COMMANDS', playthru.turns.slice(0,playthru.turns.length).map((t) => { return t.cmd }).join(', '));
   }
   function makestable(tok) {
     if (!stabletoks.has(tok)) {
@@ -263,8 +249,8 @@ function GameRunner() {
         // tokens have priority if they are uncommon and haven't had many goal attempts or successes
         updatetokfreq(token, stat);
         // record best walkthrough
-        if (numturns < stat.first && hacks.length == 0) {
-          info('REDUCE', token, numturns, '<', stat.first, '(', stat.goalsucc, '/', stat.goalruns, '/', stat.count, ')');
+        if (playthru.turns.length-1 < stat.first) {
+          info('REDUCE', token, playthru.turns.length-1, '<', stat.first, '(', stat.goalsucc, '/', stat.goalruns, '/', stat.count, ')');
           showcommands();
           // if this is 1st turn, don't bother replaying
           if (numturns == 0) {
@@ -272,7 +258,7 @@ function GameRunner() {
           } else {
             stat.best = playthru;
           }
-          stat.first = numturns;
+          stat.first = playthru.turns.length-1;
           stat.cmd = turncmd;
         }
       }
@@ -351,9 +337,10 @@ function GameRunner() {
     return s;
   }
   function hackvm() {
+    if (!goalrec) return;
     // hack probability increases as token gets more stable
-    var prob = goalrec && goalrec.stablecount * 0.1;
-    if (goalrec && numturns == goalrec.first+1 && Math.random() < prob && stabletoks.has(goaltok)) {
+    var prob = goalrec.stablecount * 0.1;
+    if (numturns == 0 && Math.random() < prob && stabletoks.has(goaltok)) {
       // choose a stable token to hack with
       var tok = rndchoice(vmtoks);
       // move object x to parent y
@@ -363,6 +350,14 @@ function GameRunner() {
         var y = parseInt(toks[2])
         game.mv(x,y);
         hacks.push(tok);
+        // add probable hacked commands to beginning of playthrough
+        var bestrec = alltokstats[tok];
+        if (bestrec && bestrec.best) {
+          for (var i=0; i<=bestrec.first; i++) {
+            var turn = bestrec.best.turns[i];
+            playthru.addturn(turn.cmd, turn.toks, true);
+          }
+        }
       }
     }
   }
