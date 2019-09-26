@@ -263,7 +263,7 @@ function GameRunner() {
         // tokens have priority if they are uncommon and haven't had many goal attempts or successes
         updatetokfreq(token, stat);
         // record best walkthrough
-        if (numturns < stat.first) {
+        if (numturns < stat.first && hacks.length == 0) {
           info('REDUCE', token, numturns, '<', stat.first, '(', stat.goalsucc, '/', stat.goalruns, '/', stat.count, ')');
           showcommands();
           // if this is 1st turn, don't bother replaying
@@ -288,7 +288,7 @@ function GameRunner() {
   }
   game.print=function*(x) {
     // did we die? abort play
-    if (/RESTART, RESTORE, or QUIT/.exec(x)) {
+    if (/RESTART, RESTORE, or QUIT/.exec(x)) { // TODO
       committurn(-1);
       throw new DeadError();
     }
@@ -352,8 +352,8 @@ function GameRunner() {
   }
   function hackvm() {
     // hack probability increases as token gets more stable
-    var prob = goalrec && goalrec.stablecount * 0.001;
-    if (goalrec && Math.random() < prob && stabletoks.has(goaltok)) {
+    var prob = goalrec && goalrec.stablecount * 0.1;
+    if (goalrec && numturns == goalrec.first+1 && Math.random() < prob && stabletoks.has(goaltok)) {
       // choose a stable token to hack with
       var tok = rndchoice(vmtoks);
       // move object x to parent y
@@ -453,7 +453,9 @@ function*GrunOne() {
       if (e instanceof DeadError) {
         //console.log(turncmd,'killed you');
       } else if (e instanceof NoMoreTurns) {
-        //
+        //console.log("END");
+      } else if (e.message != null && e.message.startsWith("JSZM:")) {
+        console.log("ERROR", e.message);
       } else {
         throw e;
       }

@@ -652,8 +652,11 @@ JSZM.prototype={
         case 235: // SCREEN
           if(this.screen) yield*this.screen(op0);
           break;
+        case 243: // OUTPUT_STREAM
+          // TODO
+          break;
         default:
-          throw new JSZMError("JSZM: Invalid Z-machine opcode");
+          throw new JSZMError("JSZM: Invalid Z-machine opcode " + inst + " @ " + pc);
       }
     }
 
