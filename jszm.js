@@ -332,13 +332,13 @@ JSZM.prototype={
       while(mem[z]) {
         if((mem[z]&31)==op1) {
           op3=z+1;
-          this.log("pf",op0,op1);
+          //this.log("pf",op0,op1);
           return true;
         } else {
           z+=(mem[z]>>5)+2;
         }
       }
-      this.log("pf",op0,0);
+      //this.log("pf",op0,0);
       op3=0;
       return false;
     };
@@ -353,7 +353,7 @@ JSZM.prototype={
       if(x==0) ds.push(y);
       else if(x<16) cs[0].local[x-1]=y;
       else {
-        //if (x>=16&&x<256) this.log("store",x,pc);
+        if (x>=16&&x<256) this.log("store",x,y);
         this.put(globals+2*x,y);
       }
     };
@@ -366,7 +366,7 @@ JSZM.prototype={
       if(x==0) ds[ds.length-1]=y;
       else if(x<16) cs[0].local[x-1]=y;
       else {
-        //if (x>=16&&x<256) this.log("store",x,pc);
+        if (x>=16&&x<256) this.log("store",x,y);
         this.put(globals+2*x,y);
       }
     };
@@ -604,7 +604,9 @@ JSZM.prototype={
           }
           break;
         case 225: // PUT
-          this.put((op0+op1*2)&65535,op2);
+          let a3 = (op0+op1*2)&65535;
+          //this.log("store",a3,op2);
+          this.put(a3,op2);
           break;
         case 226: // PUTB
           mem[(op0+op1)&65535]=op2;
@@ -627,7 +629,7 @@ JSZM.prototype={
           yield*this.genPrint(String(op0));
           break;
         case 231: // RANDOM
-          this.log('rand',op0,0);
+          //this.log('rand',op0,0);
           if (op0 <= 0) {               // If 'op0' is non-positive, reseed the PRNG.
             if (op0 === 0) {
               initRng();                // If 0, seed using Math.random().

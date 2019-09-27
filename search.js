@@ -135,7 +135,7 @@ function GameRunner() {
   game.log = (a,b,c) => {
     turnmods += 1;
     if (usetech) {
-      if (a == 'pf' || a == 'rand') return; // use as evidence of activity, but don't record
+      if (a == 'pf' || a == 'rand' || a == 'store') return; // use as evidence of activity, but don't record
       var key = a+"_"+b+"_"+c;
       turntoks.delete("@"+a+"_"+b+"_"+playstate[b]);
       playstate[b] = c;
