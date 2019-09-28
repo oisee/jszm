@@ -72,3 +72,20 @@ MOVE and STORE.
 
 If doing so generates new tokens, we can try mixing in
 commands that generate those tokens.
+
+
+MULTIPLE GOALS
+
+Goals can have a precondition and goal token.
+
+When we see new tokens, we can scan backwards to
+find preconditions, making theories about what
+caused the goal token. We can discard theories that
+don't work out.
+
+We might assume less-frequent tokens are more interesting.
+We probably want to use the VM state, not the tokens per-se.
+But how do we string together "GET SWORD" and "FIGHT TROLL"?
+
+We'll have at least two playthroughs to compare.
+

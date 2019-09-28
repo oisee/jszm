@@ -38,9 +38,9 @@ function GameRunner() {
 
   var vocab;		// vocabulary for game
   var vocabdict = new Set();	// .. in dictionary form
-  var maxturns = 50;	// max turns in current game
+  var maxturns = 200;	// max turns in current game
   var usewords = true;	// use word output as tokens?
-  var wordtoklen = 20;  // truncate phrases to this length
+  var wordtoklen = 30;  // truncate phrases to this length
   var usetech = true;	// use vm tech output?
   var usecondtok = !true; // use conditional (__) tokens?
   var usevmhack = true;	// fuzz the VM too?
@@ -50,7 +50,7 @@ function GameRunner() {
   var prescoretok = "Your score is"; // true if we use SCORE command
   var scoremult = 100;	// multiplier for goal priority
 
-  var ignorecmds = {}; // no longer used JSON.parse(fs.readFileSync('ignorecmds.json'));
+  var ignorecmds = new Set();
   var alltokstats = {}; // token -> record
   var stabletoks = new Set();
   var vmtoks = [];
@@ -132,14 +132,30 @@ function GameRunner() {
       }
     }
   }
+  function setstate(k,v) {
+    playstate[k] = v;
+    if (usetech) {
+      logtoken("@"+k+"_"+v);
+    }
+  }
   game.log = (a,b,c) => {
     turnmods += 1;
-    if (usetech) {
-      if (a == 'pf' || a == 'rand' || a == 'store') return; // use as evidence of activity, but don't record
-      var key = a+"_"+b+"_"+c;
-      turntoks.delete("@"+a+"_"+b+"_"+playstate[b]);
-      playstate[b] = c;
-      logtoken("@"+key);
+    if (a == 'pf' || a == 'rand' || a == 'store') return; // use as evidence of activity, but don't record
+    // update state
+    switch (a) {
+      case 'mv':
+      case 'store':
+        setstate(a+"_"+b, c);
+        break;
+      case 'pp':
+        setstate("pp_"+b+"_"+c, 1);
+        break;
+      case 'fs':
+        setstate("f_"+b+"_"+c, 1);
+        break;
+      case 'fc':
+        setstate("f_"+b+"_"+c, 0);
+        break;
     }
   }
   
@@ -237,7 +253,7 @@ function GameRunner() {
     // ignore command if it did nothing
     if (/*turnmods == 0 || */!turncmd) {
       if (turncmd) {
-        //ignorecmds[turncmd] = 1;
+        //ignorecmds.add(turncmd);
         debug("IGNORING", turncmd);
       }
     } else {
@@ -274,7 +290,7 @@ function GameRunner() {
   }
   game.print=function*(x) {
     // did we die? abort play
-    if (/RESTART, RESTORE, or QUIT/.exec(x)) { // TODO
+    if (/RESTART.+RESTORE|guhK  /.exec(x)) { // TODO
       committurn(-1);
       throw new DeadError();
     }
@@ -307,7 +323,7 @@ function GameRunner() {
     if (!vocab) {
       var keys = game.vocabulary.keys();
       vocab=Array.from(keys).filter((s) => { return /^\w/.exec(s) });
-      vocab=vocab.filter((s) => { return !/^(restor|restar|save|q|quit)$/.exec(s) });
+      vocab=vocab.filter((s) => { return !/^(restor|restar|save|q|quit|zzkjlk)$/.exec(s) });
       vocab.forEach((w) => { vocabdict.add(w); });
     }
   }
@@ -333,7 +349,7 @@ function GameRunner() {
         if (Math.random() < prob_end)
           break;
       }
-    } while (ignorecmds[s]);
+    } while (ignorecmds.has(s));
     return s;
   }
   function hackvm() {

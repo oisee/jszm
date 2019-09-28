@@ -23,7 +23,7 @@ G.run((function*() {
     var key = pc+"_"+cond;
     if (!branches[key]) {
       branches[key] = 1;
-      console.log(pc,cond);
+      //console.log(pc,cond);
     }
   }
   game.print=function*(x) {

@@ -82,6 +82,8 @@ const JSZM_Version={major:2,minor:0,subminor:2,timestamp:1480624305074};
 
 class JSZMError extends Error { }
 
+const MAX_ITERS = 10000000; // in case of infinite loop
+
 function JSZM(arr) {
   var mem;
   mem=this.memInit=new Uint8Array(arr);
@@ -377,7 +379,8 @@ JSZM.prototype={
     yield*this.highlight(!!(this.savedFlags&2));
 
     // Main loop
-    main: for(;;) {
+    main: for(var _iter=0; ; _iter++) {
+      if (_iter > MAX_ITERS) throw new JSZMError("JSZM: Infinite loop?");
       inst=pcgetb();
       if(inst<128) {
         // 2OP
@@ -656,6 +659,7 @@ JSZM.prototype={
           break;
         case 243: // OUTPUT_STREAM
           // TODO
+          yield*this.genPrint("OUTPUT_STREAM");
           break;
         default:
           throw new JSZMError("JSZM: Invalid Z-machine opcode " + inst + " @ " + pc);
