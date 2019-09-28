@@ -44,6 +44,7 @@ function GameRunner() {
   var usetech = true;	// use vm tech output?
   var usecondtok = !true; // use conditional (__) tokens?
   var usevmhack = true;	// fuzz the VM too?
+  var usevmstate = true; // keep VM state
   var prob_vocab = 0.5; // probability of a recent vocab word
   var prob_end = 0.5;   // probability of ending the command
   var stablethresh = 5; // token considered stable after this many successes (per turn)
@@ -111,14 +112,34 @@ function GameRunner() {
         goalruns: 0,
         goalsucc: 0,
         first: 99999,
-        cmd: turncmd,
+        cmds: [turncmd],
         stablecount: 0,
         maxscore: 0,
+        state: Object.assign({}, playstate),
       };
       info("NEWTOKEN",token,turncmd);
       showcommands();
+    } else {
+      var deleted = false;
+      for (var key in stat.state) {
+        if (playstate[key] != stat.state[key]) {
+          delete stat.state[key];
+          deleted = true;
+        }
+      }
+      if (deleted) {
+        console.log("MERGE", token, '|', turncmd, '|', Object.keys(stat.state).join(' '));
+        stat.cmds.push(turncmd);
+      }
     }
     turntoks.add(stat.token); // string interning
+  }
+  function getstatetokens() {
+    var set = new Set();
+    for (var key in playstate) {
+      set.add(key + "_" + playstate[key]);
+    }
+    return set;
   }
   function logtoken(token) {
     addtoken(token);
@@ -133,10 +154,8 @@ function GameRunner() {
     }
   }
   function setstate(k,v) {
-    playstate[k] = v;
-    if (usetech) {
-      logtoken("@"+k+"_"+v);
-    }
+    if (usevmstate) playstate[k] = v;
+    if (usetech) logtoken(k+"_"+v);
   }
   game.log = (a,b,c) => {
     turnmods += 1;
@@ -145,16 +164,16 @@ function GameRunner() {
     switch (a) {
       case 'mv':
       case 'store':
-        setstate(a+"_"+b, c);
+        setstate("@"+a+"_"+b, c);
         break;
       case 'pp':
-        setstate("pp_"+b+"_"+c, 1);
+        setstate("@pp_"+b+"_"+c, 1);
         break;
       case 'fs':
-        setstate("f_"+b+"_"+c, 1);
+        setstate("@f_"+b+"_"+c, 1);
         break;
       case 'fc':
-        setstate("f_"+b+"_"+c, 0);
+        setstate("@f_"+b+"_"+c, 0);
         break;
     }
   }
@@ -168,7 +187,7 @@ function GameRunner() {
     // reset other stuff
     playtoks = new Set();
     playvocab = new Set();
-    playstate = new Map();
+    playstate = {};
     turntoks = new Set();
     turnmods = 0;
     numturns = -1;
@@ -183,7 +202,7 @@ function GameRunner() {
     if (goalrec) {
       goalrec.goalruns += 1;
       updatetokfreq(goaltok, goalrec);
-      debug("GOAL:",goalrec.cmd,goal,goalrec.count,goalrec.first,goaltok);
+      debug("GOAL:",goalrec.cmds,goal,goalrec.count,goalrec.first,goaltok);
     }
   }
   function showcommands() {
@@ -275,7 +294,7 @@ function GameRunner() {
             stat.best = playthru;
           }
           stat.first = playthru.turns.length-1;
-          stat.cmd = turncmd;
+          stat.cmds.push(turncmd);
         }
       }
       // add to playtoks
@@ -423,6 +442,7 @@ function GameRunner() {
       op = "(random)";
     }
     debug('CMD', numturns, turncmd, op, goaltok);
+    //if (usevmstate) playstate['@cmd'] = turncmd; // TODO: multiple cmds?
     return turncmd;
     //return yield In.questionG("");
   };
