@@ -44,7 +44,7 @@ function GameRunner() {
   var usetech = true;	// use vm tech output?
   var usecondtok = !true; // use conditional (__) tokens?
   var usevmhack = true;	// fuzz the VM too?
-  var usevmstate = true; // keep VM state
+  var usevmstate = !true; // keep VM state
   var prob_vocab = 0.5; // probability of a recent vocab word
   var prob_end = 0.5;   // probability of ending the command
   var stablethresh = 5; // token considered stable after this many successes (per turn)
@@ -119,7 +119,7 @@ function GameRunner() {
       };
       info("NEWTOKEN",token,turncmd);
       showcommands();
-    } else {
+    } else if (usevmstate) {
       var deleted = false;
       for (var key in stat.state) {
         if (playstate[key] != stat.state[key]) {
@@ -331,7 +331,7 @@ function GameRunner() {
     }
     // split tokens, see if this is a vocab word
     for (var w of x.split(/[^a-z]/i)) {
-      if (w && w.length >= 3 && (w=w.toLowerCase()) && vocabdict.has(w)) playvocab.add(w);
+      if (w && w.length >= 3 && (w=w.toLowerCase().substring(0,6)) && vocabdict.has(w)) playvocab.add(w);
     }
     //console.log("VOCAB",Array.from(playvocab).join(' '));
     // print to console
